@@ -152,7 +152,7 @@ matrixRf_Fin <- confusionMatrix(predRf, testing$classe)
 matrixRf_Fin$overall[1]
 ```
 
-The final model hat 97% accuracy on the test set.
+The final model hat 97% accuracy on the test set. Again it will very easy to train a model that will perform better, simply training it with more data (70% has been left out).
 
 Now that the model is chosen, cross-validated and trained it is possible to estimate the **out of sample performance** using the validation data that were spared until now.
 
@@ -164,7 +164,7 @@ matrixRfVal$overall[1]
 
 ```
 
-The (out of sample) validation performance is also 97%.
+The (out of sample) validation performance is also 97%. This means that the out of sample error should be 3%.
 
 The confusion matrix obtained is the following:
 ```{r}

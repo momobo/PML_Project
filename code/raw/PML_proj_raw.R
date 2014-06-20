@@ -2,7 +2,7 @@
 getwd()
 # install.packages("caret")
 
-setwd("~\\..\\Google Drive\\Data Science\\08_PracticalMachineLearning\\PML_Project\\code\\raw")
+setwd("~\\Google Drive\\Data Science\\08_PracticalMachineLearning\\PML_Project\\code\\raw")
 
 library(caret)
 library(ggplot2)
@@ -78,9 +78,9 @@ RERUN=FALSE
 if(RERUN){
     set.seed(13)
     modRf <- train(classe ~ . , data=train.small, trControl = ctrl, method="rf",  prox=T, number=5)
-    save(modRf, file = "..\\data\\my_model.rda")
+    save(modRf, file = "..\\..\\data\\my_model.rda")
 } else{
-    load("..\\data\\my_model.rda")
+    load("..\\..\\data\\my_model.rda")
 }
 # varImp(modRf) # importance
 
@@ -122,9 +122,9 @@ if(RERUN){
     set.seed(13)
     ctrl <- trainControl(method = "cv", repeats = 4)
     modRf_Fin <- train(classe ~ . , data=train, trControl = ctrl, method="rf",  prox=T, number=5)
-    save(modRf_Fin, file = "..\\data\\my_model_final.rda")
+    save(modRf_Fin, file = "..\\..\\data\\my_model_final.rda")
 } else{
-    load("..\\data\\my_model_final.rda")
+    load("..\\..\\data\\my_model_final.rda")
 }
 
 predRf <- predict(modRf_Fin,testing); 
