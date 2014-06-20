@@ -1,0 +1,189 @@
+---
+title: "Human Activity Recognition Project"
+author: "Massimo Morelli"
+date: "Wednesday, June 18, 2014"
+output: html_document
+---
+
+## Summary
+In this report I try to train a machine learning model to predict the activity of the subject in a HAR (Human Activity Recognition) exercise. HAR is a growing field of research, which tries to understand Human Behavior from observations regarding the subject and its environment. With a Random Forest predictor the Accuracy of 97% is reached, even with limited computing resource. 
+
+## Method
+
+### Data collection
+Data are made available from the group Groupware@LES ([1]), and comprise a a data set with TBD observation for training and cross validation, and a data set with 20 data without the variable to predict (variable "classe").
+
+
+```{r result="hide" }
+library(caret)
+library(ggplot2)
+dat <-   read.csv("..\\data\\pml-training.csv", na.strings= c("NA", "#DIV/0!"))
+proof <- read.csv("..\\data\\pml-testing.csv",  na.strings= c("NA", "#DIV/0!"))
+```
+
+
+### Exploratory analysis
+Data are loaded in a data frame. There are 160 features, and many of them have a great proportion of NA. There appear to be a strong collinearity in many of the variables, so some kind of dimension reduction appears mandatory. 
+
+I divided the training data in three set: training, test, validation, to be used to training the model, to test various models, to predict out of sample accuracy. 
+
+Due to the scarce computing resource at my disposal I kept the first train set extremely small. Once the model was chosen I could retrain it with more data. 
+
+```{r}
+# divide test and training
+# Create a building data set and validation set
+set.seed(7)
+inBuild <- createDataPartition(y=dat$classe,  p=0.7, list=FALSE)
+validation <- dat[-inBuild,]; 
+buildData <- dat[inBuild,]
+
+# Intern data test divide in train and test. For performance reason we keep
+# the train set extremely small
+set.seed(11)
+small <- createDataPartition(y=buildData$classe,  p=0.1, list=FALSE)
+train.small <- buildData[small,] 
+testing     <- buildData[-small,]
+dim(train.small)
+dim(testing)
+```
+
+Some column appear to be related to the experiment (windows variable, timestam variable, X) and even if in the preliminary analysis performed they seems to be very helpful in predict the variable of interest, I don't think that would be fair to introduce them in the analysis, so I excluded them. As an example of this fact see in the following figure as the "classe" variable is visually correlated with X:
+
+```{r qplot, echo=FALSE}
+qplot(X, new_window, col=classe, data=buildData)+geom_point(position = "jitter")
+```
+
+Then I performed feature selection. I removed the non-numeric feature, the near zero variance feature, the feature that are not correlable with the others, the highly correlated. I am left with 48 features.
+
+```{r result="hide"}
+# eliminate columns relative to the experiment
+colElim <- c("X" , "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+             "new_window", "num_window", "cvtd_timestamp")
+colConserv <- setdiff(names(train.small), colElim)
+train.small <- subset(train.small, T, colConserv)
+
+# ------------ real feature selection --------------------------------------
+# pre process: eliminate the near zero variance variable
+nzv <- nearZeroVar(train.small)
+train.small <- train.small[, -nzv]
+dim(train.small)
+
+# save classe
+classe <- train.small$classe
+#train.small <- train.small[, -c("X")]
+
+# eliminate non numeric 
+sa <- sapply(train.small, is.numeric )
+train.small <- train.small[,-which(sa==F)]
+
+#  eliminate the non correlable
+train.small <- train.small[, -which(is.na(cor(train.small)))]
+descrCorr <- cor(train.small)
+
+#  eliminate the high correlate
+highCorr <- findCorrelation(descrCorr, 0.9) 
+train.small <- train.small[, -highCorr]
+
+# set the predicted 
+train.small$classe <- classe
+dim(train.small)
+
+# save features
+names <- names(train.small)
+
+```
+
+
+## Statistical modeling
+
+In the first cross validation phase I tried, with the help of the R package "Caret", three models: Penalized Multinomial Regression[2], Penalized Discriminant Analysis[3] and Random Forest[4]. I confronted the accuracy of the three models on the test set (models cross validation) and I found that the Random Forest performance was way better (92%).
+
+```{r}
+RERUN=FALSE
+if(RERUN){
+    set.seed(13)
+    modRf <- train(classe ~ . , data=train.small, trControl = ctrl, method="rf",  prox=T, number=5)
+    save(modRf, file = "..\\data\\my_model.rda")
+} else{load("..\\data\\my_model.rda")}
+# varImp(modRf) # relative importance of predictors
+# predict
+predRf <- predict(modRf,testing); 
+matrixRf <- confusionMatrix(predRf, testing$classe)
+# accuracy
+matrixRf$overall[1]
+
+#-----------------------------------------------------------------------------
+# test with other models : Penalized Multinomial Regression
+modLDA <- train(classe ~ . , data=train.small, method="PenalizedLDA")
+predLDA <- predict(modLDA,testing);
+matrixLDA <- confusionMatrix(predLDA, testing$classe)
+# accuracy
+matrixLDA$overall[1]
+
+# pda: penalized discriminant analysis
+modPda <- train(classe ~ . , data=train.small, method="pda")
+predPda <- predict(modPda,testing);
+matrixPda <- confusionMatrix(predPda, testing$classe)
+# accuracy
+matrixPda$overall[1]
+#-----------------------------------------------------------------------------
+```
+
+A New Random Forest model has then been trained with more data, but unfortunately with my PC I could not use all of them. Using 30% of the train/test data I obtained a more accurate model that I k-mean cross-validated with the help of the Caret package. Of course the model would be even more accurate with more data. This would be easy to check, having access to a more powerful computer.
+```{r}
+# retrain with more data 
+set.seed(13)
+getTrain   <- createDataPartition(y=buildData$classe,  p=0.3, list=FALSE)
+train       <- buildData[getTrain,] 
+testing     <- buildData[-getTrain,]
+
+# filter the feature
+train <- subset(train, T, names)
+
+RERUN=FALSE
+if(RERUN){
+    set.seed(13)
+    ctrl <- trainControl(method = "cv", repeats = 4)
+    modRf_Fin <- train(classe ~ . , data=train, trControl = ctrl, method="rf",  prox=T, number=5)
+    save(modRf_Fin, file = "..\\data\\my_model_final.rda")
+} else{load("..\\data\\my_model_final.rda")}
+predRf <- predict(modRf_Fin,testing); 
+matrixRf_Fin <- confusionMatrix(predRf, testing$classe)
+matrixRf_Fin$overall[1]
+```
+
+The final model hat 97% accuracy on the test set.
+
+Now that the model is chosen, cross-validated and trained it is possible to estimate the **out of sample performance** using the validation data that were spared until now.
+
+```{r}
+# check our resulting model over the validation set
+predRfVal <- predict(modRf_Fin,validation);
+matrixRfVal <- confusionMatrix(predRfVal, validation$classe)
+matrixRfVal$overall[1]
+
+```
+
+The (out of sample) validation performance is also 97%.
+
+The confusion matrix obtained is the following:
+```{r}
+matrixRfVal$table
+```
+
+
+## Reproducibility
+All analyses performed in this manuscript are reproduced in the R markdown file HAR_Finale.Rmd [5]
+
+## Bibliography
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
+
+[2] Colby, S, Lee, S, Lewinger, JP, Bull, S. Pmlr: Penalized Multinomial Logistic Regression. R package version 1.0; 2010. http://cran.r-project.org/web/packages/pmlr/pmlr.pdf
+
+[3] Hastie, Trevor; Buja, Andreas; Tibshirani, Robert. Penalized Discriminant Analysis. The Annals of Statistics 23 (1995), no. 1, 73--102. doi:10.1214/aos/1176324456. http://projecteuclid.org/euclid.aos/1176324456. http://www.stanford.edu/~hastie/Papers/pda.pdf
+
+[4] A. Liaw and M. Wiener (2002). Classification and Regression by randomForest. R News 2(3), 18--22.  http://cran.r-project.org/web/packages/pmlr/pmlr.pdf
+
+
+[5] R Markdown Page. URL: http://www.rstudio.com/ide/docs/authoring/using_markdown. Accessed 18.06.2014
+
